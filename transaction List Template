@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Data Transaksi{% endblock %}
+{% block page_title %}Data Transaksi{% endblock %}
+{% block page_sub %}Semua data pemesanan online{% endblock %}
+
+{% block content %}
+<div class="filter-bar">
+  <div class="form-group">
+    <label>Platform</label>
+    <select id="fPlatform">
+      <option value="">Semua Platform</option>
+      <option value="gojek" {% if platform=='gojek' %}selected{% endif %}>Gojek</option>
+      <option value="grabfood" {% if platform=='grabfood' %}selected{% endif %}>GrabFood</option>
+      <option value="shopeefood" {% if platform=='shopeefood' %}selected{% endif %}>ShopeeFood</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label>Tanggal</label>
+    <input type="date" id="fDate" value="{{ date_filter }}">
+  </div>
+  <div style="display:flex;gap:8px;align-items:flex-end">
+    <button class="btn btn-primary" onclick="applyFilter()">🔍 Filter</button>
+    <button class="btn btn-ghost" onclick="clearFilter()">✕ Reset</button>
+  </div>
+  <div style="margin-left:auto;align-self:flex-end">
+    <a href="{{ url_for('add_transaction') }}" class="btn btn-primary">➕ Tambah Data</a>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div class="card-title" style="margin:0">📋 Daftar Transaksi
+      <span style="font-size:12px;color:var(--muted);font-weight:400"> — {{ transactions|length }} data</span>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Platform</th>
+          <th>Tanggal</th>
+          <th>No. Order</th>
+          <th>Pelanggan</th>
+          <th>Waktu (menit)</th>
+          <th>Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if transactions %}
+          {% for t in transactions %}
+          <tr>
+            <td style="color:var(--muted);font-family:var(--mono);font-size:12px">{{ loop.index }}</td>
+            <td>
+              <span class="badge badge-{{ t.platform }}">
+                {% if t.platform == 'gojek' %}🛵 Gojek
+                {% elif t.platform == 'grabfood' %}🚗 GrabFood
+                {% else %}🛍️ ShopeeFood{% endif %}
+              </span>
+            </td>
+            <td style="font-family:var(--mono);font-size:13px">{{ t.date }}</td>
+            <td style="color:var(--muted)">{{ t.order_number }}</td>
+            <td>{{ t.customer or '-' }}</td>
+            <td>
+              <span style="font-family:var(--mono);font-size:15px;font-weight:700;
+                {% if t.delivery_time <= 7 %}color:var(--accent2)
+                {% elif t.delivery_time <= 12 %}color:var(--warning)
+                {% else %}color:var(--danger){% endif %}">
+                {{ t.delivery_time }}
+              </span>
+              <span style="font-size:11px;color:var(--muted)"> mnt</span>
+            </td>
+            <td>
+              <a href="{{ url_for('delete_transaction', tid=t.id) }}"
+                 onclick="return confirm('Hapus data ini?')"
+                 class="btn btn-danger btn-sm">🗑️ Hapus</a>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Tidak ada data ditemukan</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function applyFilter() {
+  const p = document.getElementById('fPlatform').value;
+  const d = document.getElementById('fDate').value;
+  let url = '{{ url_for("transactions") }}?';
+  if (p) url += 'platform=' + p + '&';
+  if (d) url += 'date=' + d;
+  window.location = url;
+}
+function clearFilter() { window.location = '{{ url_for("transactions") }}'; }
+</script>
+{% endblock %}
