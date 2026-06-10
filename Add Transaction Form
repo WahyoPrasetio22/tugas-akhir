@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Input Pemesanan{% endblock %}
+{% block page_title %}Input Pemesanan{% endblock %}
+{% block page_sub %}Tambahkan data baru pemesanan online{% endblock %}
+
+{% block content %}
+<div style="max-width:560px">
+  <div class="card">
+    <div class="card-title">📦 Form Input Data Pemesanan</div>
+    <form method="POST">
+      <div class="form-group">
+        <label>Platform</label>
+        <select name="platform" required>
+          <option value="">— Pilih Platform —</option>
+          <option value="gojek">🛵 Gojek (GoFood)</option>
+          <option value="grabfood">🚗 GrabFood</option>
+          <option value="shopeefood">🛍️ ShopeeFood</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tanggal Pemesanan</label>
+        <input type="date" name="date" required value="{{ today }}">
+      </div>
+      <div class="form-group">
+        <label>Waktu Pengiriman (menit)</label>
+        <input type="number" name="delivery_time" min="1" max="120" step="0.5" required placeholder="Contoh: 15">
+      </div>
+      <div class="form-group">
+        <label>Nama Pelanggan (opsional)</label>
+        <input type="text" name="customer" placeholder="Contoh: Budi Santoso">
+      </div>
+      <div class="form-group" style="margin-bottom:24px">
+        <label>Catatan (opsional)</label>
+        <textarea name="notes" rows="2" placeholder="Catatan tambahan..."></textarea>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button type="submit" class="btn btn-primary">✅ Simpan Data</button>
+        <a href="{{ url_for('transactions') }}" class="btn btn-ghost">← Kembali</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">💡 Panduan Input</div>
+    <ul style="font-size:13px;color:var(--muted);line-height:2;padding-left:16px">
+      <li>Waktu pengiriman dalam satuan <strong style="color:var(--text)">menit</strong></li>
+      <li>Catat sejak pesanan dikonfirmasi hingga makanan tiba</li>
+      <li>Satu entri = satu pemesanan tunggal</li>
+      <li>Nomor urut order akan digenerate otomatis per hari</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+document.querySelector('input[type=date]').value = new Date().toISOString().split('T')[0];
+</script>
+{% endblock %}
