@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}Ringkasan data pemesanan online{% endblock %}
+
+{% block content %}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total Transaksi</div>
+    <div class="stat-value" style="color:var(--accent)">{{ stats.total }}</div>
+    <span class="stat-badge" style="background:rgba(108,99,255,.12);color:var(--accent)">Semua Platform</span>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Gojek</div>
+    <div class="stat-value" style="color:var(--gojek)">{{ stats.gojek }}</div>
+    <span class="stat-badge badge-gojek">GoFood</span>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">GrabFood</div>
+    <div class="stat-value" style="color:var(--grab)">{{ stats.grabfood }}</div>
+    <span class="stat-badge badge-grabfood">GrabFood</span>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">ShopeeFood</div>
+    <div class="stat-value" style="color:var(--shopee)">{{ stats.shopeefood }}</div>
+    <span class="stat-badge badge-shopeefood">ShopeeFood</span>
+  </div>
+</div>
+
+<div class="grid-2" style="margin-bottom:20px">
+  <div class="card">
+    <div class="card-title">📦 Distribusi Platform</div>
+    <canvas id="pieChart" height="200"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">⚡ Aksi Cepat</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <a href="{{ url_for('add_transaction') }}" class="btn btn-primary" style="justify-content:center">
+        ➕ Tambah Data Pemesanan
+      </a>
+      <a href="{{ url_for('analysis') }}" class="btn btn-ghost" style="justify-content:center">
+        📈 Jalankan Analisis MA
+      </a>
+      <a href="{{ url_for('report') }}" class="btn btn-ghost" style="justify-content:center">
+        📑 Lihat Laporan Prediksi
+      </a>
+      <a href="{{ url_for('transactions') }}" class="btn btn-ghost" style="justify-content:center">
+        📋 Kelola Data Transaksi
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">ℹ️ Tentang Metode Moving Average</div>
+  <p style="font-size:13.5px;color:var(--muted);line-height:1.7">
+    <strong style="color:var(--text)">Moving Average (MA)</strong> adalah metode peramalan deret waktu yang menghitung rata-rata dari sejumlah periode data terbaru.
+    Sistem ini menggunakan MA untuk memprediksi <strong style="color:var(--text)">waktu pengiriman (menit)</strong> pemesanan makanan online.<br><br>
+    Rumus: <code style="background:var(--surface2);padding:2px 8px;border-radius:5px;font-family:var(--mono);font-size:12px">MA(t) = (X(t) + X(t-1) + ... + X(t-n+1)) / n</code><br><br>
+    Dimana <em>n</em> adalah ordo moving average yang dapat dipilih (MA-3, MA-5, MA-7).
+    Prediksi berikutnya = nilai MA terakhir.
+  </p>
+</div>
+
+<script>
+const ctx = document.getElementById('pieChart');
+new Chart(ctx, {
+  type: 'doughnut',
+  data: {
+    labels: ['Gojek', 'GrabFood', 'ShopeeFood'],
+    datasets: [{
+      data: [{{ stats.gojek }}, {{ stats.grabfood }}, {{ stats.shopeefood }}],
+      backgroundColor: ['rgba(0,174,214,.7)', 'rgba(0,177,79,.7)', 'rgba(248,91,39,.7)'],
+      borderColor: ['#00aed6', '#00b14f', '#f85b27'],
+      borderWidth: 2, hoverOffset: 6
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { color: '#7a84a0', font: { family: 'Plus Jakarta Sans', size: 12 } } }
+    }
+  }
+});
+</script>
+{% endblock %}
