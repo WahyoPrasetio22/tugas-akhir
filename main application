@@ -1,0 +1,296 @@
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
+import json
+import os
+import statistics
+from datetime import datetime, date
+import math
+
+app = Flask(__name__)
+app.secret_key = 'food_delivery_secret_2024'
+
+DATA_FILE = 'data/transactions.json'
+USERS_FILE = 'data/users.json'
+
+def load_data(filepath):
+    if os.path.exists(filepath):
+        with open(filepath, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_data(filepath, data):
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, 'w') as f:
+        json.dump(data, f, indent=2)
+
+def init_data():
+    if not os.path.exists(USERS_FILE):
+        save_data(USERS_FILE, {"admin": {"password": "admin123", "name": "Administrator"}})
+
+    if not os.path.exists(DATA_FILE):
+        # Sample data - ShopeeFood April
+        shopee_april = {
+            "1":  [13,16,3,28,5,7,5,10,6,11,7,13,10,8,5],
+            "2":  [5,7,6,10,7,3,8,11,7,10,7,12,8,7,7,5,8,5],
+            "3":  [5,7,4,4,10,15,7,6,8,6,10,7,8,7,6,6,8,10,11,8,7,10],
+            "4":  [7,10,8,5,8,5],
+            "5":  [10,12,5,7,5,4,6,8,5,11,5,12,7,4,7,5,9,10],
+            "6":  [5,3,10,7,5,8,12,7,6,5,7,10,8,6],
+            "7":  [7,10,8,4,5,9,5,9,10,4,12,5,7,6,4,9,7,5],
+            "8":  [7,5,4,10,6,12,7,7,4,10,8,7,7,8,5,5,8,7,9,7,6,6,10,4,8,7,6,4,4,8,8,8,7],
+            "9":  [4,4,10,7,5,8,7,4,9,5,3,7,11,7,11,7,5,8,4,8,5,6,8,4,9,7,5,6,8],
+            "10": [8,4,4,9,7,7,5,8,4,7,10,7,4,5,12,8,11,6,9,10,4,7,5,8]
+        }
+
+        transactions = {}
+        for day, times in shopee_april.items():
+            date_str = f"2024-04-{int(day):02d}"
+            for i, t in enumerate(times):
+                tid = f"shopee_{date_str}_{i+1}"
+                transactions[tid] = {
+                    "id": tid,
+                    "platform": "shopeefood",
+                    "date": date_str,
+                    "order_number": i + 1,
+                    "delivery_time": t,
+                    "customer": f"Pelanggan {i+1}",
+                    "notes": ""
+                }
+        save_data(DATA_FILE, transactions)
+
+def moving_average(data, period):
+    if len(data) < period:
+        return [], []
+    ma = []
+    for i in range(period - 1, len(data)):
+        window = data[i - period + 1:i + 1]
+        ma.append(round(sum(window) / period, 2))
+    return ma
+
+def calculate_ma_stats(data, period):
+    if len(data) < period:
+        return None
+
+    ma_values = moving_average(data, period)
+    if not ma_values:
+        return None
+
+    # Predict next value = last MA
+    prediction = ma_values[-1]
+
+    # MAE & RMSE
+    actual = data[period-1:]
+    errors = [abs(a - p) for a, p in zip(actual, ma_values)]
+    mae = round(sum(errors) / len(errors), 4) if errors else 0
+    mse = round(sum(e**2 for e in errors) / len(errors), 4) if errors else 0
+    rmse = round(math.sqrt(mse), 4)
+    mape = round(sum(abs(e/a)*100 for e, a in zip(errors, actual) if a != 0) / len(errors), 4) if errors else 0
+
+    return {
+        "ma_values": ma_values,
+        "prediction": prediction,
+        "mae": mae,
+        "rmse": rmse,
+        "mape": mape,
+        "count": len(data),
+        "avg": round(sum(data)/len(data), 2),
+        "min": min(data),
+        "max": max(data)
+    }
+
+init_data()
+
+# ─── AUTH ────────────────────────────────────────────────────────────────────
+
+@app.route('/')
+def index():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    return redirect(url_for('dashboard'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        users = load_data(USERS_FILE)
+        if username in users and users[username]['password'] == password:
+            session['user'] = username
+            session['name'] = users[username]['name']
+            flash('Login berhasil!', 'success')
+            return redirect(url_for('dashboard'))
+        flash('Username atau password salah!', 'danger')
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+# ─── DASHBOARD ───────────────────────────────────────────────────────────────
+
+@app.route('/dashboard')
+def dashboard():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    transactions = load_data(DATA_FILE)
+    stats = {
+        "total": len(transactions),
+        "gojek": sum(1 for t in transactions.values() if t['platform'] == 'gojek'),
+        "grabfood": sum(1 for t in transactions.values() if t['platform'] == 'grabfood'),
+        "shopeefood": sum(1 for t in transactions.values() if t['platform'] == 'shopeefood'),
+    }
+    return render_template('dashboard.html', stats=stats)
+
+# ─── TRANSACTIONS ─────────────────────────────────────────────────────────────
+
+@app.route('/transactions')
+def transactions():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    data = load_data(DATA_FILE)
+    platform = request.args.get('platform', '')
+    date_filter = request.args.get('date', '')
+    items = list(data.values())
+    if platform:
+        items = [t for t in items if t['platform'] == platform]
+    if date_filter:
+        items = [t for t in items if t['date'] == date_filter]
+    items.sort(key=lambda x: (x['date'], x['order_number']))
+    return render_template('transactions.html', transactions=items, platform=platform, date_filter=date_filter)
+
+@app.route('/transactions/add', methods=['GET', 'POST'])
+def add_transaction():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        data = load_data(DATA_FILE)
+        platform = request.form.get('platform')
+        date_val = request.form.get('date')
+        delivery_time = float(request.form.get('delivery_time'))
+        customer = request.form.get('customer', '')
+        notes = request.form.get('notes', '')
+        # auto order number
+        same_day = [t for t in data.values() if t['platform'] == platform and t['date'] == date_val]
+        order_num = len(same_day) + 1
+        tid = f"{platform}_{date_val}_{order_num}"
+        data[tid] = {
+            "id": tid,
+            "platform": platform,
+            "date": date_val,
+            "order_number": order_num,
+            "delivery_time": delivery_time,
+            "customer": customer,
+            "notes": notes
+        }
+        save_data(DATA_FILE, data)
+        flash('Data berhasil ditambahkan!', 'success')
+        return redirect(url_for('transactions'))
+    return render_template('add_transaction.html')
+
+@app.route('/transactions/delete/<tid>')
+def delete_transaction(tid):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    data = load_data(DATA_FILE)
+    if tid in data:
+        del data[tid]
+        save_data(DATA_FILE, data)
+        flash('Data berhasil dihapus!', 'success')
+    return redirect(url_for('transactions'))
+
+# ─── MOVING AVERAGE ──────────────────────────────────────────────────────────
+
+@app.route('/analysis')
+def analysis():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    return render_template('analysis.html')
+
+@app.route('/api/analysis', methods=['POST'])
+def api_analysis():
+    body = request.json
+    platform = body.get('platform', 'shopeefood')
+    period = int(body.get('period', 3))
+    date_from = body.get('date_from', '')
+    date_to = body.get('date_to', '')
+
+    transactions = load_data(DATA_FILE)
+    items = [t for t in transactions.values() if t['platform'] == platform]
+    if date_from:
+        items = [t for t in items if t['date'] >= date_from]
+    if date_to:
+        items = [t for t in items if t['date'] <= date_to]
+    items.sort(key=lambda x: (x['date'], x['order_number']))
+
+    if not items:
+        return jsonify({"error": "Tidak ada data untuk filter ini"})
+
+    times = [t['delivery_time'] for t in items]
+    labels = [f"{t['date']} #{t['order_number']}" for t in items]
+
+    stats = calculate_ma_stats(times, period)
+    if not stats:
+        return jsonify({"error": f"Data tidak cukup untuk MA-{period}. Butuh minimal {period} data."})
+
+    ma_labels = labels[period-1:]
+
+    return jsonify({
+        "labels": labels,
+        "actual": times,
+        "ma_labels": ma_labels,
+        "ma_values": stats['ma_values'],
+        "prediction": stats['prediction'],
+        "mae": stats['mae'],
+        "rmse": stats['rmse'],
+        "mape": stats['mape'],
+        "count": stats['count'],
+        "avg": stats['avg'],
+        "min": stats['min'],
+        "max": stats['max'],
+        "period": period,
+        "platform": platform
+    })
+
+# ─── REPORT ──────────────────────────────────────────────────────────────────
+
+@app.route('/report')
+def report():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    transactions = load_data(DATA_FILE)
+
+    report_data = {}
+    for platform in ['gojek', 'grabfood', 'shopeefood']:
+        items = sorted([t for t in transactions.values() if t['platform'] == platform],
+                       key=lambda x: (x['date'], x['order_number']))
+        if not items:
+            continue
+        times = [t['delivery_time'] for t in items]
+        by_date = {}
+        for t in items:
+            by_date.setdefault(t['date'], []).append(t['delivery_time'])
+
+        daily_stats = []
+        for d, dtimes in sorted(by_date.items()):
+            ma3 = calculate_ma_stats(dtimes, 3)
+            daily_stats.append({
+                "date": d,
+                "count": len(dtimes),
+                "avg": round(sum(dtimes)/len(dtimes), 2),
+                "min": min(dtimes),
+                "max": max(dtimes),
+                "prediction_ma3": ma3['prediction'] if ma3 else "-"
+            })
+
+        overall = calculate_ma_stats(times, 3)
+        report_data[platform] = {
+            "daily": daily_stats,
+            "overall_prediction": overall['prediction'] if overall else "-",
+            "overall_mae": overall['mae'] if overall else "-",
+            "total": len(times)
+        }
+
+    return render_template('report.html', report_data=report_data)
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5050)
