@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Analisis Moving Average{% endblock %}
+{% block page_title %}Analisis Moving Average{% endblock %}
+{% block page_sub %}Hitung prediksi waktu pengiriman{% endblock %}
+
+{% block content %}
+<div class="grid-2" style="align-items:start">
+  <!-- FORM -->
+  <div>
+    <div class="card">
+      <div class="card-title">⚙️ Parameter Analisis</div>
+      <div class="form-group">
+        <label>Platform</label>
+        <select id="aPlatform">
+          <option value="shopeefood">🛍️ ShopeeFood</option>
+          <option value="gojek">🛵 Gojek</option>
+          <option value="grabfood">🚗 GrabFood</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Ordo Moving Average</label>
+        <select id="aPeriod">
+          <option value="3">MA-3 (3 periode)</option>
+          <option value="5">MA-5 (5 periode)</option>
+          <option value="7">MA-7 (7 periode)</option>
+          <option value="10">MA-10 (10 periode)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Dari Tanggal</label>
+        <input type="date" id="aFrom" value="2024-04-01">
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label>Sampai Tanggal</label>
+        <input type="date" id="aTo" value="2024-04-10">
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="runAnalysis()">
+        🔬 Jalankan Analisis
+      </button>
+    </div>
+
+    <div id="resultBox" style="display:none;margin-top:16px">
+      <div class="prediction-box">
+        <div class="pred-label">Prediksi Waktu Berikutnya</div>
+        <div class="pred-value" id="predValue">—</div>
+        <div style="color:var(--muted);font-size:13px;margin-top:4px" id="predDesc"></div>
+      </div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Jumlah Data</div>
+          <div class="metric-val" id="mCount" style="color:var(--accent)">—</div>
+          <div class="metric-sub">observasi</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Rata-rata</div>
+          <div class="metric-val" id="mAvg" style="color:var(--accent2)">—</div>
+          <div class="metric-sub">menit</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">MAE</div>
+          <div class="metric-val" id="mMae" style="color:var(--warning)">—</div>
+          <div class="metric-sub">mean abs error</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">RMSE</div>
+          <div class="metric-val" id="mRmse" style="color:var(--danger)">—</div>
+          <div class="metric-sub">root mean sq err</div>
+        </div>
+      </div>
+      <div class="metric" style="margin-top:10px">
+        <div class="metric-label">MAPE</div>
+        <div class="metric-val" id="mMape" style="color:var(--shopee);font-size:18px">—</div>
+        <div class="metric-sub">Mean Absolute Percentage Error</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHART -->
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">📊 Grafik Waktu Pengiriman vs MA</div>
+      <div id="chartPlaceholder" style="height:260px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">
+        ← Jalankan analisis untuk melihat grafik
+      </div>
+      <canvas id="maChart" style="display:none"></canvas>
+    </div>
+    <div class="card" id="tableCard" style="display:none">
+      <div class="card-title">📋 Tabel Perhitungan MA</div>
+      <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Label</th>
+              <th>Aktual (mnt)</th>
+              <th>MA (mnt)</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="maTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let chartInst = null;
+
+async function runAnalysis() {
+  const btn = document.querySelector('button[onclick="runAnalysis()"]');
+  btn.textContent = '⏳ Memproses...';
+  btn.disabled = true;
+
+  const body = {
+    platform: document.getElementById('aPlatform').value,
+    period: document.getElementById('aPeriod').value,
+    date_from: document.getElementById('aFrom').value,
+    date_to: document.getElementById('aTo').value
+  };
+
+  try {
+    const res = await fetch('/api/analysis', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    const d = await res.json();
+    if (d.error) { alert(d.error); return; }
+    renderResults(d);
+  } catch(e) { alert('Error: ' + e.message); }
+  finally {
+    btn.textContent = '🔬 Jalankan Analisis';
+    btn.disabled = false;
+  }
+}
+
+function renderResults(d) {
+  document.getElementById('resultBox').style.display = 'block';
+  document.getElementById('predValue').textContent = d.prediction + ' mnt';
+  document.getElementById('predDesc').textContent = `MA-${d.period} dari ${d.count} data ${d.platform}`;
+  document.getElementById('mCount').textContent = d.count;
+  document.getElementById('mAvg').textContent = d.avg;
+  document.getElementById('mMae').textContent = d.mae;
+  document.getElementById('mRmse').textContent = d.rmse;
+  document.getElementById('mMape').textContent = d.mape + '%';
+
+  // Chart
+  document.getElementById('chartPlaceholder').style.display = 'none';
+  document.getElementById('maChart').style.display = 'block';
+  if (chartInst) chartInst.destroy();
+
+  const colors = { shopeefood: '#f85b27', gojek: '#00aed6', grabfood: '#00b14f' };
+  const pc = colors[d.platform] || '#6c63ff';
+  const canvas = document.getElementById('maChart');
+  canvas.height = 220;
+
+  chartInst = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: d.labels,
+      datasets: [
+        {
+          label: 'Aktual (menit)',
+          data: d.actual,
+          borderColor: '#7a84a0',
+          backgroundColor: 'rgba(122,132,160,.08)',
+          pointRadius: 2,
+          borderWidth: 1.5,
+          tension: 0.3
+        },
+        {
+          label: `MA-${d.period}`,
+          data: Array(d.period - 1).fill(null).concat(d.ma_values),
+          borderColor: pc,
+          backgroundColor: pc + '15',
+          pointRadius: 3,
+          borderWidth: 2.5,
+          tension: 0.4
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: {
+          labels: { color: '#7a84a0', font: { family: 'Plus Jakarta Sans', size: 11 } }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#7a84a0', maxTicksLimit: 10, font: {size: 10} },
+          grid: { color: 'rgba(255,255,255,.04)' }
+        },
+        y: {
+          ticks: { color: '#7a84a0', font: {size: 11} },
+          grid: { color: 'rgba(255,255,255,.06)' },
+          title: { display: true, text: 'Waktu (menit)', color: '#7a84a0', font: {size: 11} }
+        }
+      }
+    }
+  });
+
+  // Table
+  document.getElementById('tableCard').style.display = 'block';
+  const tbody = document.getElementById('maTableBody');
+  tbody.innerHTML = '';
+  const period = parseInt(d.period);
+  d.labels.forEach((lbl, i) => {
+    const actual = d.actual[i];
+    const maVal = i >= period - 1 ? d.ma_values[i - (period - 1)] : null;
+    const err = maVal !== null ? Math.abs(actual - maVal).toFixed(2) : null;
+    const errColor = err === null ? '' : (parseFloat(err) <= 2 ? 'color:var(--accent2)' : parseFloat(err) <= 5 ? 'color:var(--warning)' : 'color:var(--danger)');
+    tbody.innerHTML += `
+      <tr>
+        <td style="color:var(--muted);font-size:12px">${i+1}</td>
+        <td style="font-size:12px;color:var(--muted)">${lbl}</td>
+        <td style="font-family:var(--mono);font-weight:600">${actual}</td>
+        <td style="font-family:var(--mono);color:${d.platform=='shopeefood'?'#f85b27':d.platform=='gojek'?'#00aed6':'#00b14f'}">${maVal !== null ? maVal : '<span style="color:var(--muted)">—</span>'}</td>
+        <td style="font-family:var(--mono);${errColor}">${err !== null ? err : '<span style="color:var(--muted)">—</span>'}</td>
+      </tr>`;
+  });
+}
+</script>
+{% endblock %}
